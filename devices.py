@@ -24,7 +24,13 @@ class Host(Node):
         self.mac_table[default_gateway_ip] = gateway_mac 
         
         # Link to directly connected device (Router)
-        self.link = None  
+        self.link = None 
+
+        # New states for L4 (MT)
+        self.next_seq_num = 0
+        self.expected_seq_num = 0
+        self.waiting_for_ack = False
+        self.last_ack_received = None
 
     # ==========================================
     # LAYER 3: NETWORK
@@ -95,6 +101,49 @@ class Host(Node):
         # 3. Calculate checksum.
         # 4. Call self.send_network(segment, config.HOST_B_IP)
         pass
+        self.log("Message received from Application layer")
+
+        # Splitting message into chunks of 500 bytes
+
+        chunks = [message_data[i:i + 500] for i in range (0, len(message_data), 500)]
+
+        self.log(4, f"Message splitted into {len(chunks)} chunks")
+
+        for chunk in chunks:
+            ack_received = False
+
+            while not ack_received:
+                seq_num = self.next_seq_num
+
+                segment = L4SegmentA(
+                    src_port = 5000,
+                    dst_port = 5001,
+                    type_flag = 0, # 0 -> DATA
+                    seq_num = seq_num,
+                    data = chunk,
+                    checksum = 0 # initial checksum 0
+                )
+        
+        # Checksum assigning 
+        segment.checksum = self.calculate_checksum(segment)
+
+        self.waiting_for_ack = True
+        self.last_ack_received = None
+
+        self.log(4, f"DATA segment created: SEQ = {seq_num}, LENGTH = {segment.length}, CHECKSUM = {segment.cheksum}")
+        self.log(4, Segment was sent to Network LAyer)
+
+        self.send_network(segment, self.get_peer_id())
+
+
+        if self.last_ack_received == seq_num:
+            self.log(4, f"Correct ACK received: ACK: {self.last_ack_received}")
+            self.waiting_for_ack = False
+            ack_received = True
+
+            self.next_seq_num = 1 - self.next_seq_num
+        else:
+            self.log(4, "Incorrect of missing ACK. Retransmitting the segment")
 
     def receive_transport(self, segment):
         # TODO: Teammate 2
@@ -102,6 +151,23 @@ class Host(Node):
         # 2. If DATA segment: Deliver data to App layer, generate ACK, send_network(ack_segment)
         # 3. If ACK segment: Process sequence number to continue RDT 2.2
         pass
+    
+    def calculate_checksum(self, segment): # basic sha256 checksum
+        data_string = ( 
+            str(segment.src_port)
+            + str(segment.dst_port)
+            + str(segment.type_flag)
+            + str(segment.seq_num)
+            + str(segment.data)
+        )
+
+        return sum(ord(char) for char in data_string) % 256
+    
+    def get_peer_id(self): #getter of other Host IP so can work bothways
+        if self.ip == config.HOST_A_IP:
+            return config.HOST_B_IP
+        else:
+            return config.HOST_A_IP
 
 
 class Router(Node):
