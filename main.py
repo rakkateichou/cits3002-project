@@ -15,5 +15,14 @@ router.interfaces["Interface 1"]["link"] = host_a
 router.interfaces["Interface 2"]["link"] = host_b
 
 # 3. Start the process (They will handle sys.argv for file size here)
-# ...
-# host_a.send_transport(data)
+#cli input
+if len(sys.argv) > 1:
+    size = int(sys.argv[1])
+else: 
+    size = 100 
+
+
+data = "A" * size 
+print(f"TEST Only: Host A sends {size} bytes ------> Host B")
+
+host_a.send_transport(data)

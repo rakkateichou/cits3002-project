@@ -100,11 +100,10 @@ class Host(Node):
         # 2. Implement RDT 2.2 loop (Wait for correct ACK, timeout/retransmit logic).
         # 3. Calculate checksum.
         # 4. Call self.send_network(segment, config.HOST_B_IP)
-        pass
-        self.log("Message received from Application layer")
+
+        self.log(4, "Message received from Application layer")
 
         # Splitting message into chunks of 500 bytes
-
         chunks = [message_data[i:i + 500] for i in range (0, len(message_data), 500)]
 
         self.log(4, f"Message splitted into {len(chunks)} chunks")
@@ -115,44 +114,36 @@ class Host(Node):
             while not ack_received:
                 seq_num = self.next_seq_num
 
-                segment = L4SegmentA(
-                    src_port = 5000,
-                    dst_port = 5001,
+                segment = L4Segment(
+                    src_port = config.PORT_SRC,
+                    dst_port = config.PORT_DST,
                     type_flag = 0, # 0 -> DATA
                     seq_num = seq_num,
                     data = chunk,
                     checksum = 0 # initial checksum 0
                 )
         
-        # Checksum assigning 
-        segment.checksum = self.calculate_checksum(segment)
+                segment.checksum = self.calculate_checksum(segment) # Checksum assigning
 
-        self.waiting_for_ack = True
-        self.last_ack_received = None
+                self.waiting_for_ack = True
+                self.last_ack_received = None
 
-        self.log(4, f"DATA segment created: SEQ = {seq_num}, LENGTH = {segment.length}, CHECKSUM = {segment.cheksum}")
-        self.log(4, Segment was sent to Network LAyer)
+                self.log(4, f"DATA segment created: SEQ = {seq_num}, LENGTH = {segment.length}, CHECKSUM = {segment.checksum}")
+                self.log(4, "Segment was sent to Network LAyer")
 
-        self.send_network(segment, self.get_peer_id())
+                self.send_network(segment, self.get_peer_ip())
 
 
-        if self.last_ack_received == seq_num:
-            self.log(4, f"Correct ACK received: ACK: {self.last_ack_received}")
-            self.waiting_for_ack = False
-            ack_received = True
+                if self.last_ack_received == seq_num:
+                    self.log(4, f"Correct ACK received: ACK: {self.last_ack_received}")
+                    self.waiting_for_ack = False
+                    ack_received = True
 
-            self.next_seq_num = 1 - self.next_seq_num
-        else:
-            self.log(4, "Incorrect of missing ACK. Retransmitting the segment")
+                    self.next_seq_num = 1 - self.next_seq_num
+                else:
+                    self.log(4, "Incorrect of missing ACK. Retransmitting the segment")
 
-    def receive_transport(self, segment):
-        # TODO: Teammate 2
-        # 1. Verify Checksum.
-        # 2. If DATA segment: Deliver data to App layer, generate ACK, send_network(ack_segment)
-        # 3. If ACK segment: Process sequence number to continue RDT 2.2
-        pass
-    
-    def calculate_checksum(self, segment): # basic sha256 checksum
+    def calculate_checksum(self, segment): # basic checksum
         data_string = ( 
             str(segment.src_port)
             + str(segment.dst_port)
@@ -163,11 +154,109 @@ class Host(Node):
 
         return sum(ord(char) for char in data_string) % 256
     
-    def get_peer_id(self): #getter of other Host IP so can work bothways
+    def get_peer_ip(self): #getter of other Host IP so can work bothways
         if self.ip == config.HOST_A_IP:
             return config.HOST_B_IP
         else:
             return config.HOST_A_IP
+
+    def receive_transport(self, segment):
+        # TODO: Teammate 2
+        # 1. Verify Checksum.
+        # 2. If DATA segment: Deliver data to App layer, generate ACK, send_network(ack_segment)
+        # 3. If ACK segment: Process sequence number to continue RDT 2.2
+
+        if segment.type_flag == 0:
+            segment_type = "DATA"
+        else: 
+            segment_type = "ACK" 
+
+        self.log(4, f"Segment received from Network layer: TYPE = {segment_type}, SEQ = {segment.seq_num}")
+
+        # Checksumm verification block
+        received_checksum = segment.checksum
+        segment.checksum = 0
+        expected_checksum = self.calculate_checksum(segment)
+        segment.checksum = received_checksum
+
+        if received_checksum != expected_checksum:
+            self.log(4, "Failed to validate checksum")
+
+            duplicate_ack_num = 1 - self.expected_seq_num
+
+            ack_segment = L4Segment(
+                src_port = config.PORT_DST,
+                dst_port = config.PORT_SRC,
+                type_flag = 1, # 1 -> ACK msg
+                seq_num = duplicate_ack_num,
+                data = "",
+                checksum = 0 # initial checksum 0
+            )
+
+            ack_segment.checksum = self.calculate_checksum(ack_segment)
+
+            self.log(4, f"Duplicate ACK created: ACK = {duplicate_ack_num}")
+
+            self.send_network(ack_segment, self.get_peer_ip())
+            self.log(4, "ACK was sent to Network layer")
+            
+            return 
+        
+        self.log(4, "Checksum validations successful")
+
+
+        # First Transfer case
+        if segment.type_flag == 0:
+            self.log(4, f"Segment with DATA received: SEQ={segment.seq_num}")
+        
+            if segment.seq_num == self.expected_seq_num:
+                self.log(4, "SEQ num is correct")
+                self.log(4, f"Data will be transferred to Application layer: {segment.data}")
+
+                ack_segment = L4Segment(
+                    src_port = config.PORT_DST,
+                    dst_port = config.PORT_SRC,
+                    type_flag = 1, # 1 -> ACK msg
+                    seq_num = segment.seq_num,
+                    data = "",
+                    checksum = 0 # initial checksum 0
+                )
+                
+                #checksum validation
+                ack_segment.checksum = self.calculate_checksum(ack_segment)
+                self.log(4, f"ACK created: ACK = {segment.seq_num}")
+                self.log(4, "ACK segment sent to NEtwork layer")
+
+                self.send_network(ack_segment, self.get_peer_ip()) #sending ack back to sender
+                self.expected_seq_num = 1 - self.expected_seq_num
+            else: # traceback to last correct ack that was received
+                self.log(4, "Unexpected data segment was received")
+
+                duplicate_ack_num = 1 - self.expected_seq_num
+                ack_segment = L4Segment(
+                    src_port = config.PORT_DST,
+                    dst_port = config.PORT_SRC,
+                    type_flag = 1, # 1 -> ACK msg
+                    seq_num = duplicate_ack_num,
+                    data = "",
+                    checksum = 0 # initial checksum 0
+                )
+
+                ack_segment.checksum = self.calculate_checksum(ack_segment)
+
+                self.log(4, f"Dupe ACK created: ACK = {duplicate_ack_num}")
+
+                self.send_network(ack_segment, self.get_peer_ip())
+                self.log(4, "Dupe of ACK was sent to Network layer")
+        # Second transfer case
+        elif segment.type_flag == 1:
+            self.log(4, f"ACK segment receved: ACK = {segment.seq_num}")
+            
+            if self.waiting_for_ack:
+                self.last_ack_received = segment.seq_num
+                self.log(4, f"ACK processed: ACK = {segment.seq_num}")
+            else:
+                self.log(4, "ACK ignored. No segment awaiting an ACK at the moment")
 
 
 class Router(Node):
