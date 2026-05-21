@@ -26,3 +26,19 @@ data = "A" * size
 print(f"TEST Only: Host A sends {size} bytes ------> Host B")
 
 host_a.send_transport(data)
+
+#Testing for corrrupted data MUST BE DELETED AFTER TEST 
+# from protocol import L4Segment 
+
+# print("\n------ TEST: Corrupted DATA received by Host B ------")
+
+# bad_data_segment = L4Segment(
+#     src_port=config.PORT_SRC,
+#     dst_port=config.PORT_DST,
+#     type_flag=0,      # DATA
+#     seq_num=0,
+#     data="This data is corrupted",
+#     checksum=999      # deliberately wrong checksum
+# )
+
+# host_b.receive_transport(bad_data_segment)

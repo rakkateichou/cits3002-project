@@ -182,24 +182,26 @@ class Host(Node):
         if received_checksum != expected_checksum:
             self.log(4, "Failed to validate checksum")
 
-            duplicate_ack_num = 1 - self.expected_seq_num
+            if segment.type_flag == 0:    
+                duplicate_ack_num = 1 - self.expected_seq_num
 
-            ack_segment = L4Segment(
-                src_port = config.PORT_DST,
-                dst_port = config.PORT_SRC,
-                type_flag = 1, # 1 -> ACK msg
-                seq_num = duplicate_ack_num,
-                data = "",
-                checksum = 0 # initial checksum 0
-            )
+                ack_segment = L4Segment(
+                    src_port = config.PORT_DST,
+                    dst_port = config.PORT_SRC,
+                    type_flag = 1, # 1 -> ACK msg
+                    seq_num = duplicate_ack_num,
+                    data = "",
+                    checksum = 0 # initial checksum 0
+                )
 
-            ack_segment.checksum = self.calculate_checksum(ack_segment)
+                ack_segment.checksum = self.calculate_checksum(ack_segment)
 
-            self.log(4, f"Duplicate ACK created: ACK = {duplicate_ack_num}")
-
-            self.send_network(ack_segment, self.get_peer_ip())
-            self.log(4, "ACK was sent to Network layer")
-            
+                self.log(4, f"Duplicate ACK created: ACK = {duplicate_ack_num}")
+                self.send_network(ack_segment, self.get_peer_ip())
+                self.log(4, "ACK was sent to Network layer")
+                
+            elif segment.type_flag == 1:
+                self.log(4, "Corrupted ACK ignored")
             return 
         
         self.log(4, "Checksum validations successful")
