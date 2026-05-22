@@ -104,7 +104,10 @@ class Host(Node):
         self.log(4, f"Data received from Application Layer. Data size={len(message_data)}")
 
         # Splitting message into chunks of 500 bytes
-        chunks = [message_data[i:i + 500] for i in range (0, len(message_data), 500)]
+        if not message_data:
+            chunks = [""]
+        else:
+            chunks = [message_data[i:i + 500] for i in range (0, len(message_data), 500)]
 
         for chunk in chunks:
             ack_received = False
@@ -189,8 +192,8 @@ class Host(Node):
                 ack_segment.checksum = self.calculate_checksum(ack_segment)
 
                 self.log(4, f"Segment created by adding transport layer header (ACK, seq={duplicate_ack_num})")
-                self.send_network(ack_segment, self.get_peer_ip())
                 self.log(4, "Segment sent to Network Layer")
+                self.send_network(ack_segment, self.get_peer_ip())
                 
             return 
         
