@@ -2,6 +2,10 @@
 import config
 from protocol import L2Frame, L3Packet, L4Segment
 
+def ip_matches_subnet(ip, subnet_cidr):
+    subnet_ip = subnet_cidr.split('/')[0]
+    return ip.split('.')[:3] == subnet_ip.split('.')[:3]
+
 class Node:
     """ Base class for Hosts and Routers """
     def __init__(self, name):
@@ -32,6 +36,12 @@ class Host(Node):
         self.waiting_for_ack = False
         self.last_ack_received = None
 
+        # Routing table configuration
+        if self.ip == config.HOST_A_IP:
+            self.routing_table = config.HOST_A_ROUTING_TABLE
+        else:
+            self.routing_table = config.HOST_B_ROUTING_TABLE
+
     # ==========================================
     # LAYER 3: NETWORK
     # ==========================================
@@ -41,7 +51,15 @@ class Host(Node):
         self.log(3, f"Destination IP read: {dst_ip}")
         self.log(3, "Routing table lookup performed")
         
-        next_hop_ip = self.default_gateway_ip
+        next_hop_ip = None
+        for subnet, next_hop, interface in self.routing_table:
+            if ip_matches_subnet(dst_ip, subnet):
+                next_hop_ip = next_hop
+                break
+        
+        if not next_hop_ip:
+            next_hop_ip = self.default_gateway_ip
+            
         self.log(3, f"Next-hop IP determined: {next_hop_ip}")
         self.log(3, "Outgoing interface selected")
         
@@ -59,7 +77,7 @@ class Host(Node):
         if packet.dst_ip == self.ip:
             self.log(3, "Packet identified as local delivery")
             self.log(3, "Segment delivered to Transport Layer")
-            self.receive_transport(packet.payload) # Hand off to Teammate 2's L4 logic
+            self.receive_transport(packet.payload) # Hand off L4
         else:
             self.log(3, "Packet dropped: Invalid destination IP")
 
@@ -92,15 +110,9 @@ class Host(Node):
         self.receive_network(frame.payload)
 
     # ==========================================
-    # LAYER 4: TRANSPORT (Teammate 2's Domain)
+    # LAYER 4: TRANSPORT
     # ==========================================
     def send_transport(self, message_data):
-        # TODO: Teammate 2
-        # 1. Segment message if > 500 bytes.
-        # 2. Implement RDT 2.2 loop (Wait for correct ACK, timeout/retransmit logic).
-        # 3. Calculate checksum.
-        # 4. Call self.send_network(segment, config.HOST_B_IP)
-
         self.log(4, f"Data received from Application Layer. Data size={len(message_data)}")
 
         # Splitting message into chunks of 500 bytes
@@ -161,11 +173,6 @@ class Host(Node):
             return config.HOST_A_IP
 
     def receive_transport(self, segment):
-        # TODO: Teammate 2
-        # 1. Verify Checksum.
-        # 2. If DATA segment: Deliver data to App layer, generate ACK, send_network(ack_segment)
-        # 3. If ACK segment: Process sequence number to continue RDT 2.2
-
         self.log(4, "Segment received from Network Layer")
 
         # Checksumm verification block
@@ -259,6 +266,7 @@ class Router(Node):
         # Pre-fill router MAC tables so it knows how to reach directly connected hosts
         self.mac_table[config.HOST_A_IP] = config.HOST_A_MAC
         self.mac_table[config.HOST_B_IP] = config.HOST_B_MAC
+        self.routing_table = config.R1_ROUTING_TABLE
 
     def receive_datalink(self, frame):
         # Determine which interface the frame physically came in on
@@ -290,14 +298,15 @@ class Router(Node):
 
         self.log(3, "Routing table lookup performed")
         
-        # Simulated routing table (Destination Network check)
-        if packet.dst_ip == config.HOST_A_IP:
-            next_hop_ip = config.HOST_A_IP
-            out_iface = "Interface 1"
-        elif packet.dst_ip == config.HOST_B_IP:
-            next_hop_ip = config.HOST_B_IP
-            out_iface = "Interface 2"
-        else:
+        next_hop_ip = None
+        out_iface = None
+        for subnet, next_hop, interface in self.routing_table:
+            if ip_matches_subnet(packet.dst_ip, subnet):
+                next_hop_ip = next_hop
+                out_iface = interface
+                break
+                
+        if not next_hop_ip:
             self.log(3, "No route found, packet dropped")
             return
 
