@@ -30,7 +30,7 @@ class Host(Node):
         # Link to directly connected device (Router)
         self.link = None 
 
-        # New states for L4 (MT)
+        # New states for L4
         self.next_seq_num = 0
         self.expected_seq_num = 0
         self.waiting_for_ack = False
@@ -42,9 +42,8 @@ class Host(Node):
         else:
             self.routing_table = config.HOST_B_ROUTING_TABLE
 
-    # ==========================================
-    # LAYER 3: NETWORK
-    # ==========================================
+    # NETWORK LAYER (L3) 
+
     def send_network(self, segment, dst_ip):
         """ Encapsulate Segment into Packet, determine routing, pass to L2 """
         self.log(3, f"Segment received from Transport Layer: SRC_IP={self.ip}, DST_IP={dst_ip}, TTL=100")
@@ -81,9 +80,8 @@ class Host(Node):
         else:
             self.log(3, "Packet dropped: Invalid destination IP")
 
-    # ==========================================
-    # LAYER 2: DATA LINK
-    # ==========================================
+    # DATA LINK LAYER (L2)
+
     def send_datalink(self, packet, next_hop_ip):
         """ Encapsulate Packet into Frame, do MAC lookup, send over wire """
         self.log(2, "Packet received from Network Layer")
@@ -109,9 +107,8 @@ class Host(Node):
         self.log(2, "Packet delivered to Network Layer")
         self.receive_network(frame.payload)
 
-    # ==========================================
-    # LAYER 4: TRANSPORT
-    # ==========================================
+    # TRANSPORT LAYER (L4) 
+
     def send_transport(self, message_data):
         self.log(4, f"Data received from Application Layer. Data size={len(message_data)}")
 
@@ -164,7 +161,7 @@ class Host(Node):
             + str(segment.data)
         )
 
-        return sum(ord(char) for char in data_string) % 256
+        return sum(ord(char) for char in data_string) % 256 #sum of ASCII then mod 256
     
     def get_peer_ip(self): #getter of other Host IP so can work bothways
         if self.ip == config.HOST_A_IP:
