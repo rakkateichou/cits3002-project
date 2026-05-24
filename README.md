@@ -66,4 +66,3 @@ python main.py <message_size>
     ```bash
     python main.py 600
     ```
-    ```
